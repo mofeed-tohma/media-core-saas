@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>Media SaaS - رفع الملفات</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 50px; background-color: #f4f4f9; }
+        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); width: 50%; margin: auto; }
+        input, button { display: block; width: 95%; margin: 15px 0; padding: 10px; font-size: 16px; }
+        button { background-color: #007bff; color: white; border: none; cursor: pointer; border-radius: 5px;}
+        button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🚀 لوحة تحكم المنصة - تجربة الرفع</h2>
+        <!-- هذا النموذج سيرسل البيانات تماماً كما يفعل Postman -->
+        <form action="/api/v1/task/upload" method="POST" enctype="multipart/form-data">
+            
+            <label>نوع الخدمة:</label>
+            <input type="text" name="serviceType" value="COMPRESSION_LOSSLESS" readonly>
+
+            <label>الخوارزمية (مثلاً HUFFMAN):</label>
+            <input type="text" name="algorithm" value="HUFFMAN">
+
+            <label>اختر الملف لمعالجته:</label>
+            <input type="file" name="file" required>
+
+            <button type="submit">إرسال الملف للسيرفر</button>
+        </form>
+    </div>
+</body>
+</html>

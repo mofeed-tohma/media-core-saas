@@ -8,7 +8,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -16,52 +15,34 @@ import java.util.Arrays;
 
 import lombok.RequiredArgsConstructor;
 
-
 @Configuration
 @EnableWebSecurity
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthFilter;
+    
     private final AuthenticationProvider authenticationProvider;
 
-    
-    private static final String[] WHITE_LIST_URLS = {
-            "/api/v1/auth/**",
-            "/v3/api-docs",
-            "/v3/api-docs/**",
-            "/swagger-ui/**",
-            "/swagger-ui.html",
-            "/swagger-resources",
-            "/swagger-resources/**",
-            "/configuration/ui",
-            "/configuration/security",
-            "/webjars/**",
-            "/error" 
-    };
-
     @Bean
-    @SuppressWarnings({"java:S112", "java:S1130", "java:S4502", "null"})
+    
+    @SuppressWarnings({"java:S112", "java:S1130", "java:S4502"})
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
             .cors(Customizer.withDefaults()) 
             .csrf(csrf -> csrf.disable())
             
-            
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
             
             .authorizeHttpRequests(auth -> auth
-                    .requestMatchers(WHITE_LIST_URLS).permitAll()
-                    .anyRequest().authenticated()
+                    .anyRequest().permitAll()
             )
             
             .sessionManagement(session -> session
                     .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
             )
             
-            .authenticationProvider(authenticationProvider)
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+            .authenticationProvider(authenticationProvider);
 
         return http.build();
     }
@@ -71,11 +52,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         
         configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173"));
-        
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        
         configuration.setAllowedHeaders(Arrays.asList("*"));
-        
         configuration.setAllowCredentials(true);
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

@@ -32,7 +32,6 @@ public class TaskProcessorService {
     private final DeltaModulationProcessorService deltaModulationProcessorService;
     private final AiNeuralTranslationProcessorService aiNeuralTranslationProcessorService;
 
-    
     private static final String FILE_NOT_FOUND_MSG = "الملف الأصلي غير موجود على السيرفر!";
 
     @Scheduled(fixedDelay = 10000)
@@ -45,6 +44,10 @@ public class TaskProcessorService {
 
         for (Task task : pendingTasks) {
             try {
+                // تحديد هوية صاحب الملف للطباعة في السجلات (Logs)
+                String owner = (task.getUser() == null) ? "زائر مجهول (تجربة مجانية)" : task.getUser().getEmail();
+                log.info("⚙️ بدء معالجة الملف [{}] الخاص بـ: {}", task.getOriginalFileName(), owner);
+
                 task.setStatus(TaskStatus.PROCESSING);
                 taskRepository.save(task);
 
@@ -57,7 +60,7 @@ public class TaskProcessorService {
 
             } catch (IOException | RuntimeException e) { 
                 task.setStatus(TaskStatus.FAILED);
-                log.error("❌ فشلت معالجة المهمة: {}", task.getId(), e);
+                log.error("❌ فشلت معالجة المهمة رقم: {}", task.getId(), e);
             }
             taskRepository.save(task);
         }
@@ -68,7 +71,6 @@ public class TaskProcessorService {
         
         Path sourcePath = Paths.get(sourceFilePath);
         if (!Files.exists(sourcePath)) {
-            
             throw new FileNotFoundException(FILE_NOT_FOUND_MSG);
         }
 

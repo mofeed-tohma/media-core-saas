@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.File;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,25 +25,30 @@ public class TaskService {
     private final TaskRepository taskRepository;
     private final UserRepository userRepository;
 
-    
     private static final int COMPRESSION_COST = 10;
 
     @Transactional
     public Task createTask(String email, String originalFilename, String storedFilePath, ServiceType serviceType, Algorithm algorithm) {
         
-        log.info("🚀 بدء إنشاء مهمة معالجة للملف: {}", originalFilename);
+        log.info("🚀 بدء إنشاء مهمة معالجة للملف: {} | البريد الإلكتروني: {}", originalFilename, email);
 
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        User user = null;
 
-        if (user.getBalance() < COMPRESSION_COST) {
-            throw new IllegalStateException("Insufficient balance to process the task");
+        // التحقق مما إذا كان المستخدم مسجلاً لخصم الرصيد، وإلا فهي مهمة مجانية لزائر مجهول
+        if (email != null && !email.isEmpty()) {
+            user = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+            if (user.getBalance() < COMPRESSION_COST) {
+                throw new IllegalStateException("Insufficient balance to process the task");
+            }
+
+            user.setBalance(user.getBalance() - COMPRESSION_COST);
+            userRepository.save(user);
+        } else {
+            log.info("👤 مهمة جديدة لصالح زائر مجهول (بدون حساب أو خصم رصيد).");
         }
 
-        user.setBalance(user.getBalance() - COMPRESSION_COST);
-        userRepository.save(user);
-
-        
         long originalSize = 0L;
         try {
             File file = new File(storedFilePath);
@@ -53,7 +59,6 @@ public class TaskService {
             log.warn("⚠️ لم يتمكن السيرفر من قراءة حجم الملف الأصلي: {}", e.getMessage());
         }
 
-        
         long compressedSize = originalSize > 0 ? (long) (originalSize * 0.35) : 1024L;
 
         Task task = Task.builder()
@@ -65,7 +70,7 @@ public class TaskService {
                 .originalSize(originalSize)   
                 .compressedSize(compressedSize) 
                 .status(TaskStatus.COMPLETED)   
-                .user(user)
+                .user(user) // سيكون null للزوار المجهولين ويسجل كائن المستخدم للمسجلين
                 .build();
 
         return taskRepository.save(task);
@@ -76,8 +81,10 @@ public class TaskService {
                 .orElseThrow(() -> new RuntimeException("المهمة غير موجودة برقم المعرّف: " + id));
     }
 
-    
     public List<Task> getTasksByUserEmail(String email) {
+        if (email == null || email.isEmpty()) {
+            return Collections.emptyList();
+        }
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("المستخدم غير موجود!"));
         

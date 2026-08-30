@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -49,8 +50,6 @@ public class ApiController {
     private final WalletService walletService;
     private final CompressionEngineService compressionEngineService;
     private final TaskRepository taskRepository;
-
-    private static final String DEFAULT_ADMIN_EMAIL = "admin@saas.com";
 
     @GetMapping("/ping")
     public String ping() {
@@ -98,20 +97,25 @@ public class ApiController {
     ) {
         try {
             log.info("====== Receiving Upload & Compression Task ======");
-            String userEmail = principal != null ? principal.getName() : DEFAULT_ADMIN_EMAIL;
+            
+            // تحديد البريد الإلكتروني إذا كان مسجلاً، وتركه فارغاً إذا كان زائراً
+            String userEmail = principal != null ? principal.getName() : null;
 
-            int cost = "VIDEO".equalsIgnoreCase(serviceTypeStr) ? 15 : 5;
-            walletService.deductBalance(userEmail, cost);
+            // الخصم من المحفظة يتم فقط للمستخدمين المسجلين
+            if (userEmail != null) {
+                int cost = "VIDEO".equalsIgnoreCase(serviceTypeStr) ? 15 : 5;
+                walletService.deductBalance(userEmail, cost);
+            }
 
             String storedPath = fileStorageService.storeFile(file);
             String compressedPath = compressionEngineService.compressFile(storedPath, algorithmStr);
 
-            // Refactored nested logic into helper methods
             ServiceType serviceType = parseServiceType(serviceTypeStr);
             Algorithm algorithm = parseAlgorithm(algorithmStr);
             long originalSize = file.getSize();
             long compressedSize = calculateFileSize(compressedPath, originalSize / 2);
 
+            // إنشاء المهمة وإرسال userEmail (إذا كان null سيتعامل معه TaskService على أنه زائر)
             Task task = taskService.createTask(userEmail, file.getOriginalFilename(), storedPath, serviceType, algorithm);
 
             task.setOutputPayload(compressedPath);
@@ -157,7 +161,12 @@ public class ApiController {
     @GetMapping("/task/my-tasks")
     public ResponseEntity<List<Task>> getMyTasks(java.security.Principal principal) {
         try {
-            String email = principal != null ? principal.getName() : DEFAULT_ADMIN_EMAIL;
+            // إذا كان المستخدم زائراً مجهولاً، نعيد قائمة فارغة فوراً لحماية قاعدة البيانات
+            if (principal == null) {
+                return ResponseEntity.ok(Collections.emptyList());
+            }
+            
+            String email = principal.getName();
             List<Task> tasks = taskService.getTasksByUserEmail(email);
             return ResponseEntity.ok(tasks);
         } catch (IllegalArgumentException e) {
@@ -238,8 +247,6 @@ public class ApiController {
         }
     }
 
-    
-
     private ServiceType parseServiceType(String serviceTypeStr) {
         try {
             return ServiceType.valueOf(serviceTypeStr.toUpperCase());
@@ -297,7 +304,18 @@ public class ApiController {
     }
 
     private void validateTaskOwnership(Task task, java.security.Principal principal) {
-        if (principal != null && !task.getUser().getEmail().equals(principal.getName())) {
+        // إذا كانت المهمة للزوار ولا تنتمي لأي مستخدم، نسمح بالتحميل فوراً
+        if (task.getUser() == null) {
+            return;
+        }
+        
+        // إذا كان الملف يتبع لمستخدم، ولكن الزائر الحالي مجهول
+        if (principal == null) {
+            throw new IllegalArgumentException("غير مصرح لك بتحميل ملف يخص مستخدماً آخر.");
+        }
+        
+        // التحقق من أن المستخدم الحالي هو المالك الفعلي للملف
+        if (!task.getUser().getEmail().equals(principal.getName())) {
             throw new IllegalArgumentException("غير مصرح لك بالوصول إلى هذا الملف!");
         }
     }

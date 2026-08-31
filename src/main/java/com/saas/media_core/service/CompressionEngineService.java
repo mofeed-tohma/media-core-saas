@@ -3,6 +3,8 @@ package com.saas.media_core.service;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import com.saas.media_core.enums.TaskStatus;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -10,12 +12,16 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.UUID;
+import com.saas.media_core.entity.Task;
+import com.saas.media_core.repository.TaskRepository;
+import lombok.RequiredArgsConstructor;
 
+@RequiredArgsConstructor
 @Service
 @Slf4j
 public class CompressionEngineService {
 
-    
+    private final TaskRepository taskRepository;
     private static final String OUTPUT_DIR = "uploads/compressed/";
 
     public String compressFile(String inputFilePath, String algorithm) {
@@ -70,5 +76,41 @@ public class CompressionEngineService {
         byte[] output = new byte[newLength];
         System.arraycopy(input, 0, output, 0, newLength);
         return output;
+    }
+
+
+    @org.springframework.scheduling.annotation.Async("taskExecutor")
+    public void processTaskAsync(java.util.UUID taskId, String storedPath, String algorithmStr) {
+        log.info("🚀 Background processing started for Task ID: {}", taskId);
+        try {
+            
+            Task task = taskRepository.findById(taskId).orElseThrow();
+            task.setStatus(TaskStatus.PROCESSING);
+            taskRepository.save(task);
+
+            
+            String compressedPath = compressFile(storedPath, algorithmStr);
+
+            
+            long originalSize = new java.io.File(storedPath).length();
+            long compressedSize = new java.io.File(compressedPath).length();
+
+            
+            task.setOutputPayload(compressedPath);
+            task.setStatus(TaskStatus.COMPLETED);
+            task.setOriginalSize(originalSize);
+            task.setCompressedSize(compressedSize);
+            taskRepository.save(task);
+            
+            log.info("✅ Background processing COMPLETED for Task ID: {}", taskId);
+
+        } catch (Exception e) {
+            log.error("❌ Background processing FAILED for Task ID: {}", taskId, e);
+            
+            taskRepository.findById(taskId).ifPresent(task -> {
+                task.setStatus(TaskStatus.FAILED);
+                taskRepository.save(task);
+            });
+        }
     }
 }

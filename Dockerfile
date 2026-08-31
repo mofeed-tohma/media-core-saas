@@ -7,10 +7,8 @@ RUN ./mvnw clean package -DskipTests
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-RUN addgroup -S spring && adduser -S spring -G spring
-
-
-RUN mkdir -p /app/uploads && chown -R spring:spring /app
+RUN addgroup -S spring && adduser -S spring -G spring \
+    && mkdir -p /app/uploads && chown -R spring:spring /app
 
 USER spring:spring
 

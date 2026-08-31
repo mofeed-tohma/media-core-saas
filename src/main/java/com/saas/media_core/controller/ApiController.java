@@ -1,6 +1,5 @@
 package com.saas.media_core.controller;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -98,32 +97,28 @@ public class ApiController {
         try {
             log.info("====== Receiving Upload & Compression Task ======");
             
-            // تحديد البريد الإلكتروني إذا كان مسجلاً، وتركه فارغاً إذا كان زائراً
             String userEmail = principal != null ? principal.getName() : null;
 
-            // الخصم من المحفظة يتم فقط للمستخدمين المسجلين
             if (userEmail != null) {
                 int cost = "VIDEO".equalsIgnoreCase(serviceTypeStr) ? 15 : 5;
                 walletService.deductBalance(userEmail, cost);
             }
 
+            
             String storedPath = fileStorageService.storeFile(file);
-            String compressedPath = compressionEngineService.compressFile(storedPath, algorithmStr);
-
             ServiceType serviceType = parseServiceType(serviceTypeStr);
             Algorithm algorithm = parseAlgorithm(algorithmStr);
-            long originalSize = file.getSize();
-            long compressedSize = calculateFileSize(compressedPath, originalSize / 2);
 
-            // إنشاء المهمة وإرسال userEmail (إذا كان null سيتعامل معه TaskService على أنه زائر)
+            
             Task task = taskService.createTask(userEmail, file.getOriginalFilename(), storedPath, serviceType, algorithm);
+            task.setStatus(TaskStatus.PENDING); // تأكد أن PENDING موجودة في enum TaskStatus
+            task.setOriginalSize(file.getSize());
+            task = taskRepository.save(task);
 
-            task.setOutputPayload(compressedPath);
-            task.setStatus(TaskStatus.COMPLETED);
-            task.setOriginalSize(originalSize);
-            task.setCompressedSize(compressedSize);
+            
+            compressionEngineService.processTaskAsync(task.getId(), storedPath, algorithmStr);
 
-            taskRepository.save(task);
+            
             return ResponseEntity.ok(task);
 
         } catch (Exception e) {
@@ -161,7 +156,7 @@ public class ApiController {
     @GetMapping("/task/my-tasks")
     public ResponseEntity<List<Task>> getMyTasks(java.security.Principal principal) {
         try {
-            // إذا كان المستخدم زائراً مجهولاً، نعيد قائمة فارغة فوراً لحماية قاعدة البيانات
+            
             if (principal == null) {
                 return ResponseEntity.ok(Collections.emptyList());
             }
@@ -265,17 +260,6 @@ public class ApiController {
         }
     }
 
-    private long calculateFileSize(String filePath, long fallbackSize) {
-        try {
-            File compFile = new File(filePath);
-            if (compFile.exists()) {
-                return compFile.length();
-            }
-        } catch (SecurityException e) {
-            log.error("Security exception while accessing file at {}: {}", filePath, e.getMessage());
-        }
-        return fallbackSize;
-    }
 
     private UUID extractUuidFromFileName(String fileName) {
         if (fileName == null || fileName.isEmpty()) {
@@ -304,17 +288,17 @@ public class ApiController {
     }
 
     private void validateTaskOwnership(Task task, java.security.Principal principal) {
-        // إذا كانت المهمة للزوار ولا تنتمي لأي مستخدم، نسمح بالتحميل فوراً
+        
         if (task.getUser() == null) {
             return;
         }
         
-        // إذا كان الملف يتبع لمستخدم، ولكن الزائر الحالي مجهول
+        
         if (principal == null) {
             throw new IllegalArgumentException("غير مصرح لك بتحميل ملف يخص مستخدماً آخر.");
         }
         
-        // التحقق من أن المستخدم الحالي هو المالك الفعلي للملف
+        
         if (!task.getUser().getEmail().equals(principal.getName())) {
             throw new IllegalArgumentException("غير مصرح لك بالوصول إلى هذا الملف!");
         }
